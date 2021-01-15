@@ -10,6 +10,7 @@ import {
   UPDATE_PRODUCTS,
 } from "../utils/actions";
 
+import { idbPromise } from "../utils/helpers";
 import { QUERY_PRODUCTS } from "../utils/queries";
 import spinner from "../assets/spinner.gif";
 
@@ -24,15 +25,31 @@ function Detail() {
   const { products, cart } = state;
 
   useEffect(() => {
+    // already in global store
     if (products.length) {
       setCurrentProduct(products.find((product) => product._id === id));
-    } else if (data) {
+    }
+    // retrieved from server
+    else if (data) {
       dispatch({
         type: UPDATE_PRODUCTS,
         products: data.products,
       });
+
+      data.products.forEach((product) => {
+        idbPromise("products", "put", product);
+      });
     }
-  }, [products, data, dispatch, id]);
+    // get cache from idb
+    else if (!loading) {
+      idbPromise("products", "get").then((indexedProducts) => {
+        dispatch({
+          type: UPDATE_PRODUCTS,
+          products: indexedProducts,
+        });
+      });
+    }
+  }, [products, data, loading, dispatch, id]);
 
   const addToCart = () => {
     const itemInCart = cart.find((cartItem) => cartItem._id === id);
@@ -48,25 +65,17 @@ function Detail() {
         type: ADD_TO_CART,
         product: { ...currentProduct, purchaseQuantity: 1 },
       });
+      idbPromise("cart", "put", { ...currentProduct, purchaseQuantity: 1 });
     }
   };
-
-  useEffect(() => {
-    if (products.length) {
-      setCurrentProduct(products.find((product) => product._id === id));
-    } else if (data) {
-      dispatch({
-        type: UPDATE_PRODUCTS,
-        products: data.products,
-      });
-    }
-  }, [products, data, dispatch, id]);
 
   const removeFromCart = () => {
     dispatch({
       type: REMOVE_FROM_CART,
       _id: currentProduct._id,
     });
+
+    idbPromise("cart", "delete", { ...currentProduct });
   };
 
   return (
